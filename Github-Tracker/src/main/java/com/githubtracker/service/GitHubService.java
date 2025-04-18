@@ -21,7 +21,7 @@ import java.util.*;
 public class GitHubService {
 
     private static final String GITHUB_API_URL = "https://api.github.com";
-    private static final String TOKEN = "Bearer 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"; // Replace with your token
+    private static final String TOKEN = "Bearer Replace_with_your_personal_access_token";
 
     private final RestTemplate restTemplate = new RestTemplate();
 
