@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GitHub Tracker Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+<div class="container py-5">
+  <h1 class="text-center mb-4">GitHub Tracker</h1>
+
+    <!-- Link to the new Repo Contributors page -->
+  <div class="text-center mb-4">
+    <a href="repo_contributors.html" class="btn btn-secondary">View Repo Contributors</a>
+  </div>
+
+  <form id="tracker-form" class="mb-5">
+    <div class="row g-3">
+      <div class="col-md-5">
+        <input type="text" id="repoOwner" class="form-control" placeholder="GitHub Repo Ownername" required>
+        </div>
+      <div class="col-md-5">
+        <input type="text" id="username" class="form-control" placeholder="GitHub Username" required>
+      </div>
+      <div class="col-md-5">
+        <input type="text" id="repo" class="form-control" placeholder="Repository Name" required>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100">Fetch Contributions</button>
+      </div>
+    </div>
+  </form>
+
+  <div id="summary" class="mb-5"></div>
+  
+  <div id="contributions"></div>
+</div>
+
+<script>
+document.getElementById('tracker-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const repoOwner = document.getElementById('repoOwner').value.trim();
+  const username = document.getElementById('username').value.trim();
+  const repo = document.getElementById('repo').value.trim();
+  
+  const summaryDiv = document.getElementById('summary');
+  const contributionsDiv = document.getElementById('contributions');
+
+  summaryDiv.innerHTML = '';
+  contributionsDiv.innerHTML = '';
+
+  try {
+    const response = await fetch(`http://localhost:8080/api/stats/${repoOwner}/user/${username}/repo/${repo}/contributions`);
+    
+    // If the response is not OK, throw an error
+    if (!response.ok) {
+      throw new Error('User or Repo not found');
+    }
+
+    const data = await response.json();
+
+    // Summary
+    summaryDiv.innerHTML = `
+      <div class="card p-3 shadow-sm">
+        <h4>Summary</h4>
+        <p><strong>Total Commits:</strong> ${data.totalCommits}</p>
+        <p><strong>Total Pull Requests:</strong> ${data.totalPullRequests}</p>
+        <p><strong>Total Issues:</strong> ${data.totalIssues}</p>
+      </div>
+    `;
+
+    // Contributions
+    contributionsDiv.innerHTML = `
+      <h4>Commits</h4>
+      ${data.commits.map(commit => `
+        <div class="border p-2 my-2">
+          <p><strong>Message:</strong> ${commit.message}</p>
+          <p><strong>Date:</strong> ${commit.date}</p>
+        </div>
+      `).join('')}
+      
+      <h4>Pull Requests</h4>
+      ${data.pullRequests.map(pr => `
+        <div class="border p-2 my-2">
+          <p><strong>Title:</strong> ${pr.title}</p>
+          <p><strong>Created At:</strong> ${pr.createdAt}</p>
+        </div>
+      `).join('')}
+      
+      <h4>Issues</h4>
+      ${data.issues.map(issue => `
+        <div class="border p-2 my-2">
+          <p><strong>Title:</strong> ${issue.title}</p>
+          <p><strong>State:</strong> ${issue.state}</p>
+        </div>
+      `).join('')}
+    `;
+  } catch (error) {
+    // Show error message if the user or repo is not found
+    alert('Error fetching contributions: ' + error.message);
+  }
+});
+</script>
+
+</body>
+</html>
