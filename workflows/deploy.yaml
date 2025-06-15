@@ -1,6 +1,7 @@
 name: Build, Push, and Update GitOps
 
 on:
+  workflow_dispatch:  # ← allows manual run
   push:
     branches:
       - Dev-Kubernetes
