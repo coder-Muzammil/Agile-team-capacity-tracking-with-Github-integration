@@ -21,7 +21,9 @@ jobs:
           distribution: 'temurin'
 
       - name: Build app using Maven
-        run: mvn -B clean package -DskipTests
+  run: |
+    cd Github-Tracker
+    mvn -B clean package -DskipTests
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
