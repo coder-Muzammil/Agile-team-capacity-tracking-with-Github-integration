@@ -49,18 +49,25 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          key: ${{ runner.os }}-docker-${{ hashFiles('Github-Tracker/Dockerfile') }}-${{ hashFiles('Github-Tracker/**') }}
           restore-keys: |
-            ${{ runner.os }}-buildx-
+            ${{ runner.os }}-docker-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image with caching
         run: |
           IMAGE_TAG=0.0.${{ github.run_number }}
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          docker build -t muzammil588/agile-capacity-tracker:$IMAGE_TAG Github-Tracker/
+
+          docker buildx build \
+            --cache-from=type=local,src=/tmp/.buildx-cache \
+            --cache-to=type=local,dest=/tmp/.buildx-cache \
+            --tag muzammil588/agile-capacity-tracker:$IMAGE_TAG \
+            --output type=docker \
+            Github-Tracker/
+
           docker push muzammil588/agile-capacity-tracker:$IMAGE_TAG
 
       - name: Update image in GitOps repo
@@ -68,7 +75,7 @@ jobs:
           IMAGE_TAG=0.0.${{ github.run_number }}
           GITOPS_REPO=https://${{ secrets.GITOPS_PAT }}@github.com/Coder-Muzammil/GITOPS
 
-          echo "📥 Cloning GitOps repo..."
+          echo "Cloning GitOps repo..."
           git clone $GITOPS_REPO gitops-repo
           cd gitops-repo
 
@@ -78,15 +85,15 @@ jobs:
           git config user.email "actions@github.com"
 
           if [ ! -f "K8s/deployment.yaml" ]; then
-            echo "❌ K8s/deployment.yaml not found!"
+            echo " K8s/deployment.yaml not found!"
             exit 1
           fi
 
-          echo "🔧 Updating image tag in deployment.yaml..."
+          echo " Updating image tag in deployment.yaml..."
           sed -i "s|image: .*/.*:.*|image: muzammil588/agile-capacity-tracker:$IMAGE_TAG|g" K8s/deployment.yaml
 
           git add K8s/deployment.yaml
-          git commit -m "🔄 Update image tag to $IMAGE_TAG from app repo"
+          git commit -m " Update image tag to $IMAGE_TAG from app repo"
           git push origin Dev-Kubernetes
 
-          echo "✅ GitOps repo updated with image tag: $IMAGE_TAG"
+          echo " GitOps repo updated with image tag: $IMAGE_TAG"
