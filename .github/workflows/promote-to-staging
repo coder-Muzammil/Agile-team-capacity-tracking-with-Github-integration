@@ -1,0 +1,130 @@
+name: Promote to Staging
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Source branch to promote from'
+        required: true
+        default: 'Dev-Kubernetes'
+        type: choice
+        options:
+          - Dev-Kubernetes
+      target_branch:
+        description: 'Target branch to promote to'
+        required: true
+        default: 'Staging-Kubernetes'
+        type: choice
+        options:
+          - Staging-Kubernetes
+  
+jobs:
+  promote-to-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: Coder-Muzammil/GITOPS
+          token: ${{ secrets.GITOPS_PAT }}
+          fetch-depth: 0  # Fetch all branches
+      
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+      
+      - name: Get current image tag from Dev branch
+        id: get_image_tag
+        run: |
+          # Checkout Dev branch to get current image tag
+          git checkout ${{ github.event.inputs.source_branch || 'Dev-Kubernetes' }}
+          
+          # Extract current image tag from deployment.yaml
+          CURRENT_IMAGE_TAG=$(grep -oP 'image: muzammil588/agile-capacity-tracker:\K[^"]*' K8s/deployment.yaml || echo "")
+          
+          if [ -z "$CURRENT_IMAGE_TAG" ]; then
+            echo "❌ Could not extract image tag from deployment.yaml"
+            exit 1
+          fi
+          
+          echo "✅ Found image tag: $CURRENT_IMAGE_TAG"
+          echo "IMAGE_TAG=$CURRENT_IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=$CURRENT_IMAGE_TAG" >> $GITHUB_ENV
+      
+      - name: Verify Docker image exists
+        run: |
+          echo "🔍 Verifying Docker image exists: muzammil588/agile-capacity-tracker:${{ steps.get_image_tag.outputs.IMAGE_TAG }}"
+          
+          # Check if image exists on Docker Hub
+          if docker manifest inspect muzammil588/agile-capacity-tracker:${{ steps.get_image_tag.outputs.IMAGE_TAG }} > /dev/null 2>&1; then
+            echo "✅ Docker image verified successfully"
+          else
+            echo "❌ Docker image not found: muzammil588/agile-capacity-tracker:${{ steps.get_image_tag.outputs.IMAGE_TAG }}"
+            exit 1
+          fi
+      
+      - name: Create or update Staging branch
+        run: |
+          TARGET_BRANCH=${{ github.event.inputs.target_branch || 'Staging-Kubernetes' }}
+          SOURCE_BRANCH=${{ github.event.inputs.source_branch || 'Dev-Kubernetes' }}
+          
+          echo "🚀 Promoting from $SOURCE_BRANCH to $TARGET_BRANCH"
+          
+          # Check if target branch exists
+          if git ls-remote --heads origin $TARGET_BRANCH | grep -q $TARGET_BRANCH; then
+            echo "📝 Target branch $TARGET_BRANCH exists, checking it out"
+            git checkout $TARGET_BRANCH
+            git pull origin $TARGET_BRANCH
+          else
+            echo "🆕 Target branch $TARGET_BRANCH doesn't exist, creating from $SOURCE_BRANCH"
+            git checkout -b $TARGET_BRANCH
+          fi
+          
+          # Merge changes from source branch
+          echo "🔄 Merging changes from $SOURCE_BRANCH"
+          git merge origin/$SOURCE_BRANCH --no-ff -m "Promote $SOURCE_BRANCH to $TARGET_BRANCH with image tag ${{ steps.get_image_tag.outputs.IMAGE_TAG }}"
+      
+      - name: Update deployment with verified image tag
+        run: |
+          TARGET_BRANCH=${{ github.event.inputs.target_branch || 'Staging-Kubernetes' }}
+          IMAGE_TAG=${{ steps.get_image_tag.outputs.IMAGE_TAG }}
+          
+          echo "📝 Updating deployment.yaml with image tag: $IMAGE_TAG"
+          
+          # Ensure we're on the target branch
+          git checkout $TARGET_BRANCH
+          
+          # Update the image tag in deployment.yaml
+          if [ -f "K8s/deployment.yaml" ]; then
+            sed -i "s|image: muzammil588/agile-capacity-tracker:.*|image: muzammil588/agile-capacity-tracker:$IMAGE_TAG|g" K8s/deployment.yaml
+            echo "✅ Updated deployment.yaml with image tag: $IMAGE_TAG"
+          else
+            echo "❌ K8s/deployment.yaml not found!"
+            exit 1
+          fi
+      
+      - name: Commit and push changes
+        run: |
+          TARGET_BRANCH=${{ github.event.inputs.target_branch || 'Staging-Kubernetes' }}
+          IMAGE_TAG=${{ steps.get_image_tag.outputs.IMAGE_TAG }}
+          
+          # Add and commit changes
+          git add K8s/deployment.yaml
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "ℹ️ No changes to commit"
+          else
+            git commit -m "🚀 Promote to $TARGET_BRANCH with image tag $IMAGE_TAG"
+            git push origin $TARGET_BRANCH
+            echo "✅ Successfully promoted to $TARGET_BRANCH with image tag: $IMAGE_TAG"
+          fi
+      
+      - name: Summary
+        run: |
+          echo "## 🎉 Promotion Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source Branch:** ${{ github.event.inputs.source_branch || 'Dev-Kubernetes' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Branch:** ${{ github.event.inputs.target_branch || 'Staging-Kubernetes' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag:** \`${{ steps.get_image_tag.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image:** \`muzammil588/agile-capacity-tracker:${{ steps.get_image_tag.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Successfully promoted" >> $GITHUB_STEP_SUMMARY
