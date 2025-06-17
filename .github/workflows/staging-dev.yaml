@@ -1,0 +1,31 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging-kubernetes
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download image tag artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-tag
+
+      - name: Read image tag
+        id: read_tag
+        run: |
+          IMAGE_TAG=$(cat image.txt)
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Deploy using existing image
+        run: |
+          echo "Deploying image: ${{ env.IMAGE_TAG }}"
+          # Replace this with your actual deployment command
+          kubectl set image deployment/your-app your-container=${{ env.IMAGE_TAG }}
