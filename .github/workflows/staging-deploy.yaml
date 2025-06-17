@@ -1,0 +1,44 @@
+name: Reuse Dev Image and Update Staging GitOps
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - Staging-Kubernetes
+
+jobs:
+  update-staging-gitops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set IMAGE_TAG from latest run of Dev
+        run: |
+          IMAGE_TAG=0.0.${{ github.run_number }}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "✅ Using image tag: $IMAGE_TAG"
+
+      - name: Clone GitOps repo
+        run: |
+          GITOPS_REPO=https://${{ secrets.GITOPS_PAT }}@github.com/Coder-Muzammil/GITOPS
+          git clone $GITOPS_REPO gitops-repo
+          cd gitops-repo
+          git checkout Staging-Kubernetes
+
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+          if [ ! -f "K8s/deployment.yaml" ]; then
+            echo "❌ K8s/deployment.yaml not found!"
+            exit 1
+          fi
+
+          echo "📝 Updating deployment.yaml with tag: $IMAGE_TAG"
+          sed -i "s|image: .*/.*:.*|image: muzammil588/agile-capacity-tracker:$IMAGE_TAG|g" K8s/deployment.yaml
+
+          git add K8s/deployment.yaml
+          git commit -m "🚀 Promote image tag $IMAGE_TAG to Staging"
+          git push origin Staging-Kubernetes
+
+          echo "✅ Staging GitOps updated successfully!"
