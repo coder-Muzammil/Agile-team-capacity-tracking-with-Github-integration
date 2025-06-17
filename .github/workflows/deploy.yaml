@@ -1,25 +1,20 @@
 name: Build, Push, and Update GitOps
-
 on:
   workflow_dispatch: {}
   push:
     branches:
       - Dev-Kubernetes
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           java-version: "21"
           distribution: "temurin"
-
       - name: Cache Maven dependencies
         uses: actions/cache@v4
         with:
@@ -27,24 +22,20 @@ jobs:
           key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             maven-${{ runner.os }}-
-
       - name: Build app using Maven
         run: |
           cd Github-Tracker
           mvn -B clean package -DskipTests
-
       - name: Upload .jar artifact
         uses: actions/upload-artifact@v4
         with:
           name: agile-tracker-jar
           path: Github-Tracker/target/*.jar
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -52,48 +43,44 @@ jobs:
           key: ${{ runner.os }}-docker-${{ hashFiles('Github-Tracker/Dockerfile') }}-${{ hashFiles('Github-Tracker/**') }}
           restore-keys: |
             ${{ runner.os }}-docker-
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Build and push Docker image with caching
         run: |
           IMAGE_TAG=0.0.${{ github.run_number }}
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-
           docker buildx build \
             --cache-from=type=local,src=/tmp/.buildx-cache \
             --cache-to=type=local,dest=/tmp/.buildx-cache \
             --tag muzammil588/agile-capacity-tracker:$IMAGE_TAG \
             --output type=docker \
             Github-Tracker/
-
           docker push muzammil588/agile-capacity-tracker:$IMAGE_TAG
-
+      - name: Create GitHub Release Tag
+        run: |
+          IMAGE_TAG=0.0.${{ github.run_number }}
+          echo "Creating release tag: v$IMAGE_TAG"
+          git tag v$IMAGE_TAG
+          git push origin v$IMAGE_TAG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Update image in GitOps repo
         run: |
           IMAGE_TAG=0.0.${{ github.run_number }}
           GITOPS_REPO=https://${{ secrets.GITOPS_PAT }}@github.com/Coder-Muzammil/GITOPS
-
           echo "Cloning GitOps repo..."
           git clone $GITOPS_REPO gitops-repo
           cd gitops-repo
-
           git checkout Dev-Kubernetes
-
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-
           if [ ! -f "K8s/deployment.yaml" ]; then
-            echo " K8s/deployment.yaml not found!"
+            echo "K8s/deployment.yaml not found!"
             exit 1
           fi
-
-          echo " Updating image tag in deployment.yaml..."
+          echo "Updating image tag in deployment.yaml..."
           sed -i "s|image: .*/.*:.*|image: muzammil588/agile-capacity-tracker:$IMAGE_TAG|g" K8s/deployment.yaml
-
           git add K8s/deployment.yaml
-          git commit -m " Update image tag to $IMAGE_TAG from app repo"
+          git commit -m "Update image tag to $IMAGE_TAG from app repo"
           git push origin Dev-Kubernetes
-
-          echo " GitOps repo updated with image tag: $IMAGE_TAG"
+          echo "GitOps repo updated with image tag: $IMAGE_TAG"
