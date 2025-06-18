@@ -20,9 +20,22 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
           echo "✅ Using image tag: $IMAGE_TAG"
 
+      - name: Verify Docker image exists in Docker Hub
+        run: |
+          REPO=muzammil588/agile-capacity-tracker
+          echo "🔍 Checking if Docker image exists: $REPO:$IMAGE_TAG"
+          
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://hub.docker.com/v2/repositories/$REPO/tags/$IMAGE_TAG)
+
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Image $REPO:$IMAGE_TAG does not exist!"
+            exit 1
+          else
+            echo "✅ Image $REPO:$IMAGE_TAG exists. Proceeding..."
+          fi
+
       - name: Update image in GitOps repo (Staging)
         run: |
-          IMAGE_TAG=0.0.${{ github.run_number }}
           GITOPS_REPO=https://${{ secrets.GITOPS_PAT }}@github.com/Coder-Muzammil/GITOPS
           echo "Cloning GitOps repo..."
           git clone $GITOPS_REPO gitops-repo
